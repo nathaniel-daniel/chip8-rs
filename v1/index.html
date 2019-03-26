@@ -1,0 +1,41 @@
+<html>
+	<head>
+		<style>
+			#canvas{
+				width:450px; 
+				image-rendering: pixelated;
+			}
+		</style>
+		<title>CHIP 8</title>
+		<script type="module" src="js/CHIP8.js"></script>
+	</head>
+	<body>
+		<canvas id="canvas" width = "64" height = "32"></canvas>
+		<script type="module">
+			import {CHIP8, runChip} from './js/CHIP8.js';
+			function generateChipTest(){
+				return (function(){
+					
+				})();
+			}
+			
+			let a = new CHIP8();
+			let img = new Image();
+			let canvas = document.getElementById('canvas');
+			let ctx = canvas.getContext('2d');
+			window.a = a;
+			a.init();
+			/*
+				catch(e){
+						console.error(e);
+						ok = false;
+						console.log(i + " instructions executed");
+						console.log("History: ", his);
+					}
+				}
+			});*/
+			
+			a.load('pong.c8', runChip({chip: a, canvas: canvas, debug: {instructionLimit: 7}}));
+		</script>
+	</body>
+</html>
