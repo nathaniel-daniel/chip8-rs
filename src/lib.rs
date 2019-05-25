@@ -2,6 +2,7 @@ extern crate rand;
 use rand::{
     thread_rng,
     Rng,
+	rngs::OsRng,
 };
 use std::{
     fmt,
@@ -187,7 +188,8 @@ impl Chip8 {
                 self.pc += 2;
             }
             Instruction::Rand(reg, val) => {
-                self.v[reg as usize] = thread_rng().gen::<u8>() & val;
+                //self.v[reg as usize] = thread_rng().gen::<u8>() & val;
+				self.v[reg as usize] = OsRng::new().unwrap().gen::<u8>() & val;
                 self.pc += 2;
             }
             Instruction::Draw(reg_x, reg_y, n) => {

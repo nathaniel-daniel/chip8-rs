@@ -6,14 +6,15 @@
   "license": "MIT",
   "private": true,
   "scripts": {
-    "start": "parcel index.html",
-    "build": "parcel build index.html"
-  },
-  "bin": {
-    "create-rust-parcel": ".bin/create-rust-parcel.js"
+    "start": "webpack-dev-server",
+    "build": "webpack --config prod.config.js"
   },
   "devDependencies": {
-    "parcel-bundler": "^1.12.3",
-    "parcel-plugin-wasm.rs": "^1.2.8"
+    "@wasm-tool/wasm-pack-plugin": "0.2.7",
+    "copy-webpack-plugin": "^5.0.3",
+    "html-webpack-plugin": "^3.2.0",
+    "webpack": "^4.29.6",
+    "webpack-cli": "^3.3.0",
+    "webpack-dev-server": "^3.3.1"
   }
 }

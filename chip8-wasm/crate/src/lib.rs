@@ -5,6 +5,7 @@ use wasm_bindgen::prelude::*;
 #[wasm_bindgen]
 pub struct Chip8 {
     chip8: chip8::Chip8,
+	speed: usize,
 }
 
 #[wasm_bindgen]
@@ -13,25 +14,33 @@ impl Chip8 {
     pub fn new() -> Self {
         let mut chip8 = chip8::Chip8::new();
         chip8.init();
-        Chip8 { chip8 }
+        Chip8 { chip8, speed: 1 }
     }
 
-    #[wasm_bindgen]
     pub fn reset(&mut self) {
         self.chip8.init();
     }
 
-	#[wasm_bindgen]
     pub fn load(&mut self, data: &[u8]) {
         self.chip8.load(data);
     }
 	
-	#[wasm_bindgen]
-	pub fn cycle(&mut self){
-		self.chip8.cycle().unwrap();
+	pub fn cycle(&mut self){ //Should be called at 60hz
+		for _ in 0..self.speed {
+			self.chip8.cycle().unwrap();
+		}
+		
+		self.chip8.update_timers();
 	}
 	
-	#[wasm_bindgen]
+	pub fn set_speed(&mut self, speed: usize){
+		self.speed = speed;
+	}
+	
+	pub fn set_key(&mut self, key: usize, val: bool){
+		self.chip8.set_key(key, val);
+	}
+
 	pub fn get_gfx_data(&self) -> Vec<u8>{
 		self.chip8.gfx.iter().map(|&el| el as u8).collect()
 	}
