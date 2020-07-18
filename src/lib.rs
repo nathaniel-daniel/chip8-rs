@@ -1,4 +1,6 @@
-extern crate rand;
+pub mod instruction;
+
+pub use crate::instruction::Instruction;
 use rand::{
     thread_rng,
     Rng,
@@ -188,7 +190,6 @@ impl Chip8 {
                 self.pc += 2;
             }
             Instruction::Rand(reg, val) => {
-                //self.v[reg as usize] = thread_rng().gen::<u8>() & val;
 				self.v[reg as usize] = OsRng.gen::<u8>() & val;
                 self.pc += 2;
             }
@@ -255,9 +256,9 @@ impl Chip8 {
             }
             Instruction::StoreBcd(reg) => {
                 let reg = self.v[reg as usize];
-                let ones = (reg % 100) % 10; //100 unecessary? its clear though?
+                let ones = (reg % 100) % 10; // 100 unecessary? its clear though?
                 let tens = (reg / 10) % 10;
-                let hundreds = reg / 100; //u8, max size below 1000
+                let hundreds = reg / 100; // u8, max size below 1000
                 self.memory[self.i as usize + 1] = hundreds;
                 self.memory[self.i as usize + 1] = tens;
                 self.memory[self.i as usize + 1] = ones;
@@ -329,108 +330,5 @@ impl fmt::Display for Chip8 {
         write!(f, "I: {:?}\n", self.i)?;
         write!(f, "Delay timer: {}", self.delay_timer)?;
         write!(f, "Sound timer: {}", self.sound_timer)
-    }
-}
-
-#[derive(Debug)]
-pub enum Instruction {
-    ClearDisplay,
-    Return,
-    Jump(u16),
-    Call(u16),
-    SkipEqualConst(u8, u8),
-    SkipNotEqualConst(u8, u8),
-    SetVConst(u8, u8),
-    AddVConst(u8, u8),
-
-    // Math
-    SetV(u8, u8),
-    Or(u8, u8),
-    And(u8, u8),
-    Xor(u8, u8),
-    Add(u8, u8),
-    Sub(u8, u8),
-    ShiftRight(u8),
-    ShiftLeft(u8),
-
-    SkipNotEqual(u8, u8),
-    SetI(u16),
-    Rand(u8, u8),
-    Draw(u8, u8, u8),
-    SkipPressed(u8),
-    SkipNotPressed(u8),
-    LoadDelay(u8),
-    HaltUntilPressed(u8),
-    SetDelay(u8),
-    SetSound(u8),
-    AddI(u8),
-    LoadFont(u8),
-    StoreBcd(u8),
-    StoreV(u8),
-    LoadV(u8),
-
-    Unknown(u16),
-}
-
-impl From<u16> for Instruction {
-    fn from(n: u16) -> Self {
-        match n & 0xF000 {
-            0x0000 => match n & 0x0FFF {
-                0x00E0 => Instruction::ClearDisplay,
-                0x00EE => Instruction::Return,
-                _ => Instruction::Unknown(n),
-            },
-            0x1000 => Instruction::Jump(n & 0xFFF),
-            0x2000 => Instruction::Call(n & 0xFFF),
-            0x3000 => Instruction::SkipEqualConst(((n & 0x0F00) >> 8) as u8, (n & 0xFF) as u8),
-            0x4000 => Instruction::SkipNotEqualConst(((n & 0x0F00) >> 8) as u8, (n & 0xFF) as u8),
-            0x6000 => Instruction::SetVConst(((n & 0x0F00) >> 8) as u8, (n & 0xFF) as u8),
-            0x7000 => Instruction::AddVConst(((n & 0x0F00) >> 8) as u8, (n & 0xFF) as u8),
-            0x8000 => match n & 0xF {
-                0x0 => Instruction::SetV(((n & 0xF00) >> 8) as u8, ((n & 0x0F0) >> 4) as u8),
-                0x1 => Instruction::Or(((n & 0xF00) >> 8) as u8, ((n & 0x0F0) >> 4) as u8),
-                0x2 => Instruction::And(((n & 0xF00) >> 8) as u8, ((n & 0x0F0) >> 4) as u8),
-                0x3 => Instruction::Xor(((n & 0xF00) >> 8) as u8, ((n & 0x0F0) >> 4) as u8),
-                0x4 => Instruction::Add(((n & 0xF00) >> 8) as u8, ((n & 0x0F0) >> 4) as u8),
-                0x5 => Instruction::Sub(((n & 0xF00) >> 8) as u8, ((n & 0x0F0) >> 4) as u8),
-                0x6 => Instruction::ShiftRight(((n & 0xF00) >> 8) as u8),
-                0xE => Instruction::ShiftLeft(((n & 0xF00) >> 8) as u8),
-                _ => Instruction::Unknown(n),
-            },
-            0x9000 => Instruction::SkipNotEqual(((n & 0xF00) >> 8) as u8, ((n & 0x0F0) >> 4) as u8),
-            0xA000 => Instruction::SetI(n & 0x0FFF),
-            0xC000 => Instruction::Rand(((n & 0x0F00) >> 8) as u8, (n & 0xFF) as u8),
-            0xD000 => Instruction::Draw(
-                ((n & 0x0F00) >> 8) as u8,
-                ((n & 0x00F0) >> 4) as u8,
-                (n & 0x000F) as u8,
-            ),
-            0xE000 => match n & 0xFF {
-                0x9E => Instruction::SkipPressed(((n & 0x0F00) >> 8) as u8),
-                0xA1 => Instruction::SkipNotPressed(((n & 0x0F00) >> 8) as u8),
-                _ => Instruction::Unknown(n),
-            },
-            0xF000 => match n & 0xFF {
-                0x07 => Instruction::LoadDelay(((n & 0x0F00) >> 8) as u8),
-                0x0A => Instruction::HaltUntilPressed(((n & 0x0F00) >> 8) as u8),
-                0x15 => Instruction::SetDelay(((n & 0x0F00) >> 8) as u8),
-                0x18 => Instruction::SetSound(((n & 0x0F00) >> 8) as u8),
-                0x1E => Instruction::AddI(((n & 0x0F00) >> 8) as u8),
-                0x29 => Instruction::LoadFont(((n & 0x0F00) >> 8) as u8),
-                0x33 => Instruction::StoreBcd(((n & 0x0F00) >> 8) as u8),
-                0x55 => Instruction::StoreV(((n & 0x0F00) >> 8) as u8),
-                0x65 => Instruction::LoadV(((n & 0x0F00) >> 8) as u8),
-                _ => Instruction::Unknown(n),
-            },
-            _ => Instruction::Unknown(n),
-        }
-    }
-}
-
-impl fmt::Display for Instruction {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            _ => write!(f, "{:?}", self),
-        }
     }
 }
