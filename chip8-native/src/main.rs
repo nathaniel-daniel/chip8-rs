@@ -1,14 +1,12 @@
-extern crate sdl2;
 extern crate chip8;
+extern crate sdl2;
 
 use chip8::Chip8;
 use sdl2::{
     event::Event,
     keyboard::Keycode,
     pixels::Color,
-    rect::{
-        Rect,
-    },
+    rect::Rect,
 };
 
 fn main() {

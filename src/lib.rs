@@ -189,7 +189,7 @@ impl Chip8 {
             }
             Instruction::Rand(reg, val) => {
                 //self.v[reg as usize] = thread_rng().gen::<u8>() & val;
-				self.v[reg as usize] = OsRng::new().unwrap().gen::<u8>() & val;
+				self.v[reg as usize] = OsRng.gen::<u8>() & val;
                 self.pc += 2;
             }
             Instruction::Draw(reg_x, reg_y, n) => {
@@ -343,7 +343,7 @@ pub enum Instruction {
     SetVConst(u8, u8),
     AddVConst(u8, u8),
 
-    //Math
+    // Math
     SetV(u8, u8),
     Or(u8, u8),
     And(u8, u8),
