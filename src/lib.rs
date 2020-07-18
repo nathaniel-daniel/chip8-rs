@@ -3,7 +3,6 @@ pub mod instruction;
 pub use crate::instruction::Instruction;
 use rand::{
     rngs::OsRng,
-    thread_rng,
     Rng,
 };
 use std::{
@@ -12,7 +11,7 @@ use std::{
     u8,
 };
 
-const FONT: &'static [u8] = &[
+const FONT: &[u8] = &[
     0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
     0x20, 0x60, 0x20, 0x20, 0x70, // 1
     0xF0, 0x10, 0xF0, 0x80, 0xF0, // 2
@@ -93,9 +92,7 @@ impl Chip8 {
             panic!("Error: Program larger than memory")
         }
 
-        for i in 0..data.len() {
-            self.memory[i + 0x200] = data[i];
-        }
+        self.memory[0x200..(data.len() + 0x200)].clone_from_slice(&data[..]);
     }
 
     pub fn cycle(&mut self) -> Chip8Result<Instruction> {
@@ -312,7 +309,7 @@ impl Chip8 {
         self.sp -= 1;
         let ret = self.stack[self.sp as usize];
         self.stack[self.sp as usize] = 0;
-        return ret;
+        ret
     }
 
     fn get_reg(&mut self, reg: u8) -> u8 {
@@ -320,14 +317,20 @@ impl Chip8 {
     }
 }
 
+impl Default for Chip8 {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl fmt::Display for Chip8 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Chip8\n")?;
-        write!(f, "PC: {}\n", self.pc)?;
-        write!(f, "Stack: {:?}\n", self.stack)?;
-        write!(f, "SP: {}\n", self.sp)?;
-        write!(f, "V: {:?}\n", self.v)?;
-        write!(f, "I: {:?}\n", self.i)?;
+        writeln!(f, "Chip8")?;
+        writeln!(f, "PC: {}", self.pc)?;
+        writeln!(f, "Stack: {:?}", self.stack)?;
+        writeln!(f, "SP: {}", self.sp)?;
+        writeln!(f, "V: {:?}", self.v)?;
+        writeln!(f, "I: {:?}", self.i)?;
         write!(f, "Delay timer: {}", self.delay_timer)?;
         write!(f, "Sound timer: {}", self.sound_timer)
     }
