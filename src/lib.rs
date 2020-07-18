@@ -2,9 +2,9 @@ pub mod instruction;
 
 pub use crate::instruction::Instruction;
 use rand::{
+    rngs::OsRng,
     thread_rng,
     Rng,
-	rngs::OsRng,
 };
 use std::{
     fmt,
@@ -190,7 +190,7 @@ impl Chip8 {
                 self.pc += 2;
             }
             Instruction::Rand(reg, val) => {
-				self.v[reg as usize] = OsRng.gen::<u8>() & val;
+                self.v[reg as usize] = OsRng.gen::<u8>() & val;
                 self.pc += 2;
             }
             Instruction::Draw(reg_x, reg_y, n) => {
