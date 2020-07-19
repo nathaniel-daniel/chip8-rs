@@ -25,7 +25,8 @@ impl Chip8 {
         self.chip8.load(data);
     }
 	
-	pub fn cycle(&mut self){ //Should be called at 60hz
+    // Should be called at 60hz
+	pub fn cycle(&mut self){ 
 		for _ in 0..self.speed {
 			self.chip8.cycle().unwrap();
 		}
