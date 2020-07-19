@@ -1,8 +1,2 @@
-[package]
-name = "chip8"
-version = "0.1.0"
-authors = ["adumbidiot <nathaniel.daniel23@outlook.com>"]
-edition = "2018"
-
-[dependencies]
-rand = {version = "0", features = ["wasm-bindgen"]}
+[workspace]
+members = [ "chip8", "chip8-native", "chip8-wasm/crate" ]

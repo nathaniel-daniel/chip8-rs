@@ -1,11 +1,10 @@
-extern crate chip8;
-extern crate wasm_bindgen;
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
+#[derive(Default)]
 pub struct Chip8 {
     chip8: chip8::Chip8,
-	speed: usize,
+    speed: usize,
 }
 
 #[wasm_bindgen]
@@ -21,27 +20,30 @@ impl Chip8 {
         self.chip8.init();
     }
 
-    pub fn load(&mut self, data: &[u8]) {
-        self.chip8.load(data);
+    pub fn load(&mut self, data: &[u8]) -> Result<(), JsValue> {
+        self.chip8
+            .load(data)
+            .map_err(|e| format!("{:#?}", e).into())
     }
-	
-	pub fn cycle(&mut self){ //Should be called at 60hz
-		for _ in 0..self.speed {
-			self.chip8.cycle().unwrap();
-		}
-		
-		self.chip8.update_timers();
-	}
-	
-	pub fn set_speed(&mut self, speed: usize){
-		self.speed = speed;
-	}
-	
-	pub fn set_key(&mut self, key: usize, val: bool){
-		self.chip8.set_key(key, val);
-	}
 
-	pub fn get_gfx_data(&self) -> Vec<u8>{
-		self.chip8.gfx.iter().map(|&el| el as u8).collect()
-	}
+    /// Should be called at 60hz
+    pub fn cycle(&mut self) {
+        for _ in 0..self.speed {
+            self.chip8.cycle().unwrap();
+        }
+
+        self.chip8.update_timers();
+    }
+
+    pub fn set_speed(&mut self, speed: usize) {
+        self.speed = speed;
+    }
+
+    pub fn set_key(&mut self, key: usize, val: bool) {
+        self.chip8.set_key(key, val);
+    }
+
+    pub fn get_gfx_data(&self) -> Vec<u8> {
+        self.chip8.gfx.iter().map(|&el| el as u8).collect()
+    }
 }
