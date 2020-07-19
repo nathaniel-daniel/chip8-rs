@@ -1,6 +1,3 @@
-extern crate chip8;
-extern crate sdl2;
-
 use chip8::Chip8;
 use sdl2::{
     event::Event,
@@ -8,32 +5,75 @@ use sdl2::{
     pixels::Color,
     rect::Rect,
 };
+use std::time::Duration;
 
 fn main() {
-    let sdl_context = sdl2::init().unwrap();
-    let video_subsystem = sdl_context.video().unwrap();
-    let window = video_subsystem
+    // let filename = "../BLINKY.c8";
+    let filename = "../BC_test.ch8";
+    // let file_data = include_bytes!("../../roms/tetris.c8").to_vec();
+
+    let sdl_context = match sdl2::init() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Failed to init sdl context: {}", e);
+            return;
+        }
+    };
+
+    let video_subsystem = match sdl_context.video() {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("Failed to init video subsystem: {}", e);
+            return;
+        }
+    };
+
+    let window = match video_subsystem
         .window("Chip8", 64 * 10, 32 * 10)
         .position_centered()
         .build()
-        .unwrap();
-    let mut canvas = window
-        .into_canvas()
-        .target_texture()
-        .present_vsync()
-        .build()
-        .unwrap();
-    let mut event_pump = sdl_context.event_pump().unwrap();
+    {
+        Ok(w) => w,
+        Err(e) => {
+            eprintln!("Failed to open window: {}", e);
+            return;
+        }
+    };
 
-    //let file_data = std::fs::read("BLINKY.c8").unwrap();
-    let file_data = include_bytes!("../../roms/tetris.c8").to_vec();
+    let mut canvas = match window.into_canvas().target_texture().build() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Failed to init canvas: {}", e);
+            return;
+        }
+    };
+
+    let mut event_pump = match sdl_context.event_pump() {
+        Ok(e) => e,
+        Err(e) => {
+            eprintln!("Failed to init event system: {}", e);
+            return;
+        }
+    };
+
+    let file_data = match std::fs::read(filename) {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln!("Failed to read '{}': {}", filename, e);
+            return;
+        }
+    };
+
+    let cycles_per_tick = 7;
+
     let mut chip8 = Chip8::new();
     chip8.init();
-    chip8.load(&file_data);
-    let mut cycles = 0;
-    let limit = 3_000_000;
-    let speed = 8;
-    let mut printed_data = false;
+    match chip8.load(&file_data) {
+        Ok(_) => {}
+        Err(e) => {
+            eprintln!("Invalid ROM: {:#?}", e);
+        }
+    }
 
     'running: loop {
         for event in event_pump.poll_iter() {
@@ -91,15 +131,17 @@ fn main() {
             }
         }
 
-        if cycles != limit {
-            chip8.update_timers();
-            for _ in 0..speed {
-                println!("{}", chip8.cycle().unwrap());
-                cycles += 1;
-            }
-        } else if !printed_data {
-            println!("{}", chip8);
-            printed_data = true;
+        chip8.update_timers();
+
+        for _ in 0..cycles_per_tick {
+            let cycle = match chip8.cycle() {
+                Ok(c) => c,
+                Err(e) => {
+                    eprintln!("Chip8 error: {:#?}", e);
+                    break 'running;
+                }
+            };
+            println!("{}", cycle);
         }
 
         canvas.set_draw_color(Color::RGBA(0, 0, 0, 255));
@@ -114,12 +156,14 @@ fn main() {
                     .fill_rect(Rect::new(x, y, 10, 10))
                     .expect("could not fill rect");
             }
+
             if i % 2 == 0 {
                 canvas.set_draw_color(Color::RGBA(255, 0, 255, 255));
-                //canvas.fill_rect(Rect::new(x, y, 10, 10));
+                // canvas.fill_rect(Rect::new(x, y, 10, 10));
             }
         }
 
         canvas.present();
+        std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));
     }
 }

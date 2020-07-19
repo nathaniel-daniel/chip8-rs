@@ -5,11 +5,7 @@ use rand::{
     rngs::OsRng,
     Rng,
 };
-use std::{
-    fmt,
-    u16,
-    u8,
-};
+use std::fmt;
 
 const FONT: &[u8] = &[
     0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
@@ -30,56 +26,90 @@ const FONT: &[u8] = &[
     0xF0, 0x80, 0xF0, 0x80, 0x80, // F
 ];
 
+pub const MEMORY_SIZE: usize = 4096;
+pub const NUM_REGISTERS: usize = 16;
+pub const STACK_SIZE: usize = 16;
+pub const NUM_KEYS: usize = 16;
+pub const GFX_WIDTH: usize = 64;
+pub const GFX_HEIGHT: usize = 64;
+pub const GFX_SIZE: usize = GFX_WIDTH * GFX_HEIGHT;
+
+pub const MEMORY_START: usize = 0x200;
+pub const OPCODE_SIZE: u16 = 2;
+pub const FLAG_REG: u8 = 0xF;
+
 #[derive(Debug)]
-pub enum Chip8Error {}
+pub enum Chip8Error {
+    InvalidProgramSize(usize),
+    UnknownInstruction(Instruction),
+    InvalidReg(u8),
+    StackUnderflow,
+    StackOverflow,
+    ProgramCounterOutOfBounds(u16),
+}
 
 pub type Chip8Result<T> = Result<T, Chip8Error>;
 
 pub struct Chip8 {
-    memory: [u8; 4096],
-    v: [u8; 16],
+    /// Memory
+    memory: [u8; MEMORY_SIZE],
+
+    /// Registers
+    v: [u8; NUM_REGISTERS],
+
     i: u16,
+
+    /// Program counter
     pc: u16,
-    stack: [u16; 16],
+
+    /// Return Address Stack
+    stack: [u16; STACK_SIZE],
+
+    /// Stack Pointer
     sp: u8,
-    pub gfx: [bool; 64 * 32],
+
+    /// GFX memory
+    pub gfx: [bool; GFX_SIZE],
+
     delay_timer: u8,
     sound_timer: u8,
     draw_flag: bool,
-    keys: [bool; 16],
+    keys: [bool; NUM_KEYS],
     key_pressed: Option<u8>,
 }
 
 impl Chip8 {
+    /// Create a new emulator
     pub fn new() -> Self {
         Chip8 {
-            memory: [0; 4096],
-            v: [0; 16],
+            memory: [0; MEMORY_SIZE],
+            v: [0; NUM_REGISTERS],
             i: 0,
-            pc: 0x200,
-            stack: [0; 16],
+            pc: MEMORY_START as u16,
+            stack: [0; STACK_SIZE],
             sp: 0,
-            gfx: [false; 64 * 32],
+            gfx: [false; GFX_SIZE],
             delay_timer: 0,
             sound_timer: 0,
             draw_flag: false,
-            keys: [false; 16],
+            keys: [false; NUM_KEYS],
             key_pressed: None,
         }
     }
 
+    /// Reset the chip8 state
     pub fn init(&mut self) {
         self.i = 0;
-        self.memory = [0; 4096];
-        self.v = [0; 16];
-        self.pc = 0x200;
-        self.stack = [0; 16];
+        self.memory = [0; MEMORY_SIZE];
+        self.v = [0; NUM_REGISTERS];
+        self.pc = MEMORY_START as u16;
+        self.stack = [0; STACK_SIZE];
         self.sp = 0;
-        self.gfx = [false; 64 * 32];
+        self.gfx = [false; GFX_SIZE];
         self.delay_timer = 0;
         self.sound_timer = 0;
         self.draw_flag = false;
-        self.keys = [false; 16];
+        self.keys = [false; NUM_KEYS];
         self.key_pressed = None;
 
         for (i, &el) in FONT.iter().enumerate() {
@@ -87,113 +117,156 @@ impl Chip8 {
         }
     }
 
-    pub fn load(&mut self, data: &[u8]) {
-        if data.len() > self.memory.len() {
-            panic!("Error: Program larger than memory")
+    /// Load a rom
+    pub fn load(&mut self, data: &[u8]) -> Chip8Result<()> {
+        let data_len = data.len();
+        if data_len > self.memory.len() {
+            return Err(Chip8Error::InvalidProgramSize(data_len));
         }
 
-        self.memory[0x200..(data.len() + 0x200)].clone_from_slice(&data[..]);
+        self.memory[MEMORY_START..(data.len() + MEMORY_START)].clone_from_slice(&data[..]);
+
+        Ok(())
     }
 
+    /// Execute 1 cycle
     pub fn cycle(&mut self) -> Chip8Result<Instruction> {
-        let raw_op = ((self.memory[self.pc as usize] as u16) << 8)
-            + self.memory[self.pc as usize + 1] as u16;
-        let op = raw_op.into();
+        if self.pc >= MEMORY_SIZE as u16 {
+            return Err(Chip8Error::ProgramCounterOutOfBounds(self.pc));
+        }
+
+        let op1 = self.memory[self.pc as usize] as u16;
+        let op2 = self.memory[self.pc as usize + 1] as u16;
+        let op = (op1 << 8) + op2;
+        let op = Instruction::from(op);
+
         match op {
             Instruction::ClearDisplay => {
                 self.gfx.iter_mut().for_each(|el| *el = false);
                 self.draw_flag = true;
-                self.pc += 2;
+                self.pc += OPCODE_SIZE;
             }
             Instruction::Return => {
-                self.pc = self.pop_stack();
+                self.pc = self.pop_stack()?;
             }
-            Instruction::SkipEqualConst(reg, val) => {
-                self.pc += if self.v[reg as usize] == val { 4 } else { 2 }
+            Instruction::SkipEqualConst(x, val) => {
+                self.pc += if self.read_reg(x)? == val {
+                    OPCODE_SIZE * 2
+                } else {
+                    OPCODE_SIZE
+                }
             }
-            Instruction::SkipNotEqualConst(reg, val) => {
-                self.pc += if self.v[reg as usize] != val { 4 } else { 2 }
+            Instruction::SkipNotEqualConst(x, val) => {
+                self.pc += if self.read_reg(x)? != val {
+                    OPCODE_SIZE * 2
+                } else {
+                    OPCODE_SIZE
+                }
+            }
+            Instruction::SkipEqual(x, y) => {
+                let x = self.read_reg(x)?;
+                let y = self.read_reg(y)?;
+
+                if x == y {
+                    self.pc += OPCODE_SIZE * 2;
+                } else {
+                    self.pc += OPCODE_SIZE;
+                }
             }
             Instruction::Jump(addr) => {
                 self.pc = addr;
             }
             Instruction::Call(addr) => {
-                self.push_stack(self.pc + 2);
+                self.push_stack(self.pc + OPCODE_SIZE)?;
                 self.pc = addr;
             }
-            Instruction::SetVConst(reg, val) => {
-                self.v[reg as usize] = val as u8;
-                self.pc += 2;
+            Instruction::SetVConst(x, val) => {
+                self.write_reg(x, val)?;
+                self.pc += OPCODE_SIZE;
             }
-            Instruction::AddVConst(reg, val) => {
-                self.v[reg as usize] = self.get_reg(reg).overflowing_add(val).0;
-                self.pc += 2;
+            Instruction::AddVConst(x, val) => {
+                let reg_x = self.read_reg(x)?;
+                self.write_reg(x, reg_x.wrapping_add(val))?;
+                self.pc += OPCODE_SIZE;
             }
-            Instruction::SetV(reg_x, reg_y) => {
-                self.v[reg_x as usize] = self.v[reg_y as usize];
-                self.pc += 2;
+            Instruction::SetV(x, y) => {
+                let reg_y = self.read_reg(y)?;
+                self.write_reg(x, reg_y)?;
+                self.pc += OPCODE_SIZE;
             }
-            Instruction::Or(reg_x, reg_y) => {
-                self.v[reg_x as usize] |= self.v[reg_y as usize];
-                self.pc += 2;
+            Instruction::Or(x, y) => {
+                let reg_x = self.read_reg(x)?;
+                let reg_y = self.read_reg(y)?;
+                self.write_reg(x, reg_x | reg_y)?;
+                self.pc += OPCODE_SIZE;
             }
-            Instruction::And(reg_x, reg_y) => {
-                self.v[reg_x as usize] &= self.v[reg_y as usize];
-                self.pc += 2;
+            Instruction::And(x, y) => {
+                let reg_x = self.read_reg(x)?;
+                let reg_y = self.read_reg(y)?;
+                self.write_reg(x, reg_x & reg_y)?;
+                self.pc += OPCODE_SIZE;
             }
-            Instruction::Xor(reg_x, reg_y) => {
-                self.v[reg_x as usize] ^= self.get_reg(reg_y);
-                self.pc += 2;
+            Instruction::Xor(x, y) => {
+                let reg_x = self.read_reg(x)?;
+                let reg_y = self.read_reg(y)?;
+                self.write_reg(x, reg_x ^ reg_y)?;
+                self.pc += OPCODE_SIZE;
             }
-            Instruction::Add(reg_x, reg_y) => {
-                let res = self.v[reg_x as usize] as u16 + self.v[reg_y as usize] as u16;
-                self.v[0xF] = if res > std::u8::MAX as u16 { 1 } else { 0 };
-                self.v[reg_x as usize] = (res & 0xFF) as u8;
-                self.pc += 2;
+            Instruction::Add(x, y) => {
+                let reg_x = self.read_reg(x)?;
+                let reg_y = self.read_reg(y)?;
+                let res = u16::from(reg_x) + u16::from(reg_y);
+                self.write_reg(FLAG_REG, if res > u16::from(u8::MAX) { 1 } else { 0 })?;
+                self.write_reg(x, (res & u16::from(u8::MAX)) as u8)?;
+                self.pc += OPCODE_SIZE;
             }
-            Instruction::Sub(reg_x, reg_y) => {
-                self.v[0xF] = if reg_x > reg_y {
-                    self.v[reg_x as usize] -= self.v[reg_y as usize];
-                    1
+            Instruction::Sub(x, y) => {
+                let reg_x = self.read_reg(x)?;
+                let reg_y = self.read_reg(y)?;
+                self.write_reg(FLAG_REG, if reg_x > reg_y { 1 } else { 0 })?;
+                self.write_reg(x, reg_x.wrapping_sub(reg_y))?;
+                self.pc += OPCODE_SIZE;
+            }
+            Instruction::ShiftRight(x) => {
+                let reg_x = self.read_reg(x)?;
+                self.write_reg(FLAG_REG, reg_x & 0x1)?;
+                self.write_reg(x, reg_x >> 1)?;
+                self.pc += OPCODE_SIZE;
+            }
+            Instruction::SubN(x, y) => {
+                let reg_x = self.read_reg(x)?;
+                let reg_y = self.read_reg(y)?;
+                self.write_reg(FLAG_REG, if reg_y > reg_x { 1 } else { 0 })?;
+                self.write_reg(x, reg_y.wrapping_sub(reg_x))?;
+                self.pc += OPCODE_SIZE;
+            }
+            Instruction::ShiftLeft(x) => {
+                let reg_x = self.read_reg(x)?;
+                self.write_reg(FLAG_REG, (reg_x & 0b10000000) >> 7)?;
+                self.write_reg(x, reg_x << 1)?;
+                self.pc += OPCODE_SIZE;
+            }
+            Instruction::SkipNotEqual(x, y) => {
+                let reg_x = self.read_reg(x)?;
+                let reg_y = self.read_reg(y)?;
+                self.pc += if reg_x != reg_y {
+                    2 * OPCODE_SIZE
                 } else {
-                    //panic!("{} {}", self.v[reg_x as usize], self.v[reg_y as usize]);
-                    let x = self.v[reg_x as usize];
-                    let y = self.v[reg_y as usize];
-                    self.v[reg_x as usize] = x.overflowing_sub(y).0;
-                    0
+                    OPCODE_SIZE
                 };
-
-                self.pc += 2;
-            }
-            Instruction::ShiftRight(reg) => {
-                self.v[0xF] = reg & 0x80;
-                self.v[reg as usize] <<= 1;
-                self.pc += 2;
-            }
-            Instruction::ShiftLeft(reg) => {
-                self.v[0xF] = reg & 0x1;
-                self.v[reg as usize] >>= 1;
-                self.pc += 2;
-            }
-            Instruction::SkipNotEqual(reg_x, reg_y) => {
-                self.pc += if self.get_reg(reg_x) != self.get_reg(reg_y) {
-                    4
-                } else {
-                    2
-                }
             }
             Instruction::SetI(val) => {
                 self.i = val;
-                self.pc += 2;
+                self.pc += OPCODE_SIZE;
             }
-            Instruction::Rand(reg, val) => {
-                self.v[reg as usize] = OsRng.gen::<u8>() & val;
-                self.pc += 2;
+            Instruction::Rand(x, val) => {
+                self.write_reg(x, OsRng.gen::<u8>() & val)?;
+                self.pc += OPCODE_SIZE;
             }
-            Instruction::Draw(reg_x, reg_y, n) => {
-                let reg_x = self.v[reg_x as usize];
-                let reg_y = self.v[reg_y as usize];
-                self.v[0xF] = 0;
+            Instruction::Draw(x, y, n) => {
+                let reg_x = self.read_reg(x)?;
+                let reg_y = self.read_reg(y)?;
+                self.write_reg(FLAG_REG, 0)?;
 
                 for y in 0..n {
                     let pix_row = self.memory[self.i as usize + y as usize];
@@ -202,79 +275,80 @@ impl Chip8 {
                         let gfx_index =
                             (reg_x as usize + x as usize + ((y + reg_y) as usize * 64)) % (32 * 64);
                         if self.gfx[gfx_index] && pix {
-                            self.v[0xF] = 1;
+                            self.write_reg(FLAG_REG, 1)?;
                         }
                         self.gfx[gfx_index] ^= pix;
                     }
                 }
 
                 self.draw_flag = true;
-                self.pc += 2;
+                self.pc += OPCODE_SIZE;
             }
-            Instruction::SkipPressed(reg) => {
-                self.pc += if self.keys[self.v[reg as usize] as usize] {
-                    4
+            Instruction::SkipPressed(x) => {
+                let reg_x = self.read_reg(x)?;
+                self.pc += if self.keys[reg_x as usize] {
+                    2 * OPCODE_SIZE
                 } else {
-                    2
+                    OPCODE_SIZE
                 }
             }
-            Instruction::SkipNotPressed(reg) => {
-                self.pc += if self.keys[self.v[reg as usize] as usize] {
-                    2
+            Instruction::SkipNotPressed(x) => {
+                let reg_x = self.read_reg(x)?;
+                self.pc += if self.keys[reg_x as usize] {
+                    OPCODE_SIZE
                 } else {
-                    4
+                    2 * OPCODE_SIZE
                 }
             }
             Instruction::LoadDelay(reg) => {
                 self.v[reg as usize] = self.delay_timer;
-                self.pc += 2;
+                self.pc += OPCODE_SIZE;
             }
             Instruction::HaltUntilPressed(reg) => {
                 if let Some(code) = self.key_pressed {
                     self.v[reg as usize] = code;
-                    self.pc += 2;
+                    self.pc += OPCODE_SIZE;
                 }
             }
-            Instruction::SetDelay(reg) => {
-                self.delay_timer = self.v[reg as usize];
-                self.pc += 2;
+            Instruction::SetDelay(x) => {
+                let reg_x = self.read_reg(x)?;
+                self.delay_timer = reg_x;
+                self.pc += OPCODE_SIZE;
             }
-            Instruction::SetSound(reg) => {
-                self.sound_timer = self.v[reg as usize];
-                self.pc += 2;
+            Instruction::SetSound(x) => {
+                let reg_x = self.read_reg(x)?;
+                self.sound_timer = reg_x;
+                self.pc += OPCODE_SIZE;
             }
             Instruction::AddI(reg) => {
-                self.i += self.get_reg(reg) as u16;
-                self.pc += 2;
+                self.i += u16::from(self.read_reg(reg)?);
+                self.pc += OPCODE_SIZE;
             }
             Instruction::LoadFont(reg) => {
-                self.i = self.get_reg(reg) as u16 * 5;
-                self.pc += 2;
+                self.i = u16::from(self.read_reg(reg)?) * 5;
+                self.pc += OPCODE_SIZE;
             }
-            Instruction::StoreBcd(reg) => {
-                let reg = self.v[reg as usize];
-                let ones = (reg % 100) % 10; // 100 unecessary? its clear though?
-                let tens = (reg / 10) % 10;
-                let hundreds = reg / 100; // u8, max size below 1000
-                self.memory[self.i as usize + 1] = hundreds;
-                self.memory[self.i as usize + 1] = tens;
-                self.memory[self.i as usize + 1] = ones;
-                self.pc += 2;
+            Instruction::StoreBcd(x) => {
+                let reg_x = self.read_reg(x)?;
+                self.memory[self.i as usize] = reg_x / 100;
+                self.memory[self.i as usize + 1] = (reg_x / 10) % 10;
+                self.memory[self.i as usize + 2] = (reg_x % 100) % 10;
+                self.pc += OPCODE_SIZE;
             }
-            Instruction::StoreV(reg) => {
-                for i in 0..=reg as usize {
-                    self.memory[self.i as usize + i] = self.v[i];
+            Instruction::StoreV(x) => {
+                for i in 0..x + 1 {
+                    self.memory[self.i as usize + usize::from(i)] = self.read_reg(i)?;
                 }
-                self.pc += 2;
+                self.pc += OPCODE_SIZE;
             }
-            Instruction::LoadV(reg) => {
-                for i in 0..=reg as usize {
-                    self.v[i] = self.memory[self.i as usize + i];
+            Instruction::LoadV(x) => {
+                for i in 0..x + 1 {
+                    self.write_reg(i, self.memory[self.i as usize + usize::from(i)])?;
                 }
-                self.pc += 2;
+                self.pc += OPCODE_SIZE;
             }
-            Instruction::Unknown(val) => {
-                println!("Unknown: 0x{:04X}", val);
+            Instruction::Unknown(_) => {
+                return Err(Chip8Error::UnknownInstruction(op));
             }
         }
 
@@ -300,20 +374,46 @@ impl Chip8 {
         }
     }
 
-    fn push_stack(&mut self, data: u16) {
+    #[inline]
+    fn push_stack(&mut self, data: u16) -> Chip8Result<()> {
         self.stack[self.sp as usize] = data;
         self.sp += 1;
+
+        if self.sp == STACK_SIZE as u8 {
+            return Err(Chip8Error::StackOverflow);
+        }
+
+        Ok(())
     }
 
-    fn pop_stack(&mut self) -> u16 {
+    #[inline]
+    fn pop_stack(&mut self) -> Chip8Result<u16> {
+        if self.sp == 0 {
+            return Err(Chip8Error::StackUnderflow);
+        }
+
         self.sp -= 1;
         let ret = self.stack[self.sp as usize];
         self.stack[self.sp as usize] = 0;
-        ret
+
+        Ok(ret)
     }
 
-    fn get_reg(&mut self, reg: u8) -> u8 {
-        self.v[reg as usize]
+    #[inline]
+    fn read_reg(&mut self, reg: u8) -> Chip8Result<u8> {
+        self.v
+            .get(usize::from(reg))
+            .copied()
+            .ok_or(Chip8Error::InvalidReg(reg))
+    }
+
+    #[inline]
+    fn write_reg(&mut self, reg: u8, value: u8) -> Chip8Result<()> {
+        *self
+            .v
+            .get_mut(usize::from(reg))
+            .ok_or(Chip8Error::InvalidReg(reg))? = value;
+        Ok(())
     }
 }
 
@@ -331,7 +431,7 @@ impl fmt::Display for Chip8 {
         writeln!(f, "SP: {}", self.sp)?;
         writeln!(f, "V: {:?}", self.v)?;
         writeln!(f, "I: {:?}", self.i)?;
-        write!(f, "Delay timer: {}", self.delay_timer)?;
+        writeln!(f, "Delay timer: {}", self.delay_timer)?;
         write!(f, "Sound timer: {}", self.sound_timer)
     }
 }

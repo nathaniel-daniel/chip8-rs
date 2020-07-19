@@ -6,6 +6,7 @@ pub enum Instruction {
     Call(u16),
     SkipEqualConst(u8, u8),
     SkipNotEqualConst(u8, u8),
+    SkipEqual(u8, u8),
     SetVConst(u8, u8),
     AddVConst(u8, u8),
 
@@ -17,6 +18,7 @@ pub enum Instruction {
     Add(u8, u8),
     Sub(u8, u8),
     ShiftRight(u8),
+    SubN(u8, u8),
     ShiftLeft(u8),
 
     SkipNotEqual(u8, u8),
@@ -40,16 +42,24 @@ pub enum Instruction {
 
 impl From<u16> for Instruction {
     fn from(n: u16) -> Self {
+        let nnn = n & 0xFFF;
+        let x = ((n & 0x0F00) >> 8) as u8;
+        let y = ((n & 0x00F0) >> 4) as u8;
+
         match n & 0xF000 {
             0x0000 => match n & 0x0FFF {
                 0x00E0 => Instruction::ClearDisplay,
                 0x00EE => Instruction::Return,
                 _ => Instruction::Unknown(n),
             },
-            0x1000 => Instruction::Jump(n & 0xFFF),
-            0x2000 => Instruction::Call(n & 0xFFF),
-            0x3000 => Instruction::SkipEqualConst(((n & 0x0F00) >> 8) as u8, (n & 0xFF) as u8),
-            0x4000 => Instruction::SkipNotEqualConst(((n & 0x0F00) >> 8) as u8, (n & 0xFF) as u8),
+            0x1000 => Instruction::Jump(nnn),
+            0x2000 => Instruction::Call(nnn),
+            0x3000 => Instruction::SkipEqualConst(x, (n & 0xFF) as u8),
+            0x4000 => Instruction::SkipNotEqualConst(x, (n & 0xFF) as u8),
+            0x5000 => match n & 0x000F {
+                0x0 => Instruction::SkipEqual(x, y),
+                _ => Instruction::Unknown(n),
+            },
             0x6000 => Instruction::SetVConst(((n & 0x0F00) >> 8) as u8, (n & 0xFF) as u8),
             0x7000 => Instruction::AddVConst(((n & 0x0F00) >> 8) as u8, (n & 0xFF) as u8),
             0x8000 => match n & 0xF {
@@ -60,6 +70,7 @@ impl From<u16> for Instruction {
                 0x4 => Instruction::Add(((n & 0xF00) >> 8) as u8, ((n & 0x0F0) >> 4) as u8),
                 0x5 => Instruction::Sub(((n & 0xF00) >> 8) as u8, ((n & 0x0F0) >> 4) as u8),
                 0x6 => Instruction::ShiftRight(((n & 0xF00) >> 8) as u8),
+                0x7 => Instruction::SubN(x, y),
                 0xE => Instruction::ShiftLeft(((n & 0xF00) >> 8) as u8),
                 _ => Instruction::Unknown(n),
             },
@@ -83,7 +94,7 @@ impl From<u16> for Instruction {
                 0x18 => Instruction::SetSound(((n & 0x0F00) >> 8) as u8),
                 0x1E => Instruction::AddI(((n & 0x0F00) >> 8) as u8),
                 0x29 => Instruction::LoadFont(((n & 0x0F00) >> 8) as u8),
-                0x33 => Instruction::StoreBcd(((n & 0x0F00) >> 8) as u8),
+                0x33 => Instruction::StoreBcd(x),
                 0x55 => Instruction::StoreV(((n & 0x0F00) >> 8) as u8),
                 0x65 => Instruction::LoadV(((n & 0x0F00) >> 8) as u8),
                 _ => Instruction::Unknown(n),
