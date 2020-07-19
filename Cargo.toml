@@ -1,2 +1,2 @@
 [workspace]
-members = [ "chip8", "chip8-native" ]
+members = [ "chip8", "chip8-native", "chip8-wasm/crate" ]

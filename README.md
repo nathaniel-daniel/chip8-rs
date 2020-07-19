@@ -1,4 +1,4 @@
-# kahoot-rs
+# Chip8-rs
 A Chip8 Emulator.
 
 ## References

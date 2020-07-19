@@ -3,10 +3,9 @@ import('./crate/pkg').then(module => {
     roms.set('IBM', './roms/ibm.c8');
     roms.set('TETRIS', './roms/tetris.c8');
 
-    console.log(roms);
-
     let chip8 = new module.Chip8();
     chip8.reset();
+    
     fetch(roms.get("TETRIS"))
     .then((res) => {
         return res.arrayBuffer();
@@ -28,7 +27,6 @@ import('./crate/pkg').then(module => {
 
         window.addEventListener('keydown', function (e) {
             let value = keyMap.get(e.keyCode);
-            console.log(e);
             if (value) {
                 chip8.set_key(value, true);
             }

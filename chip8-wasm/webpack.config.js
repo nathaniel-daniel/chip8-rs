@@ -6,29 +6,30 @@ const WasmPackPlugin = require("@wasm-tool/wasm-pack-plugin");
 const CopyPlugin = require('copy-webpack-plugin');
 
 module.exports = {
-  entry: "./index.js",
-  output: {
-    path: dist,
-    filename: "bundle.js"
-  },
-  devServer: {
-    contentBase: dist,
-  },
-  plugins: [
-    new HtmlWebpackPlugin({
-      template: 'index.html'
-    }),
+    entry: "./index.js",
+    output: {
+        path: dist,
+        filename: "bundle.js"
+    },
+    devServer: {
+        contentBase: dist,
+    },
+    plugins: [
+        new HtmlWebpackPlugin({
+            template: 'index.html'
+        }),
 
-    new WasmPackPlugin({
-      crateDirectory: path.resolve(__dirname, "crate"),
-      // WasmPackPlugin defaults to compiling in "dev" profile. To change that, use forceMode: 'release':
-      // forceMode: 'release'
-    }),
-	new CopyPlugin([
-      { from: '../roms', to: './roms' },
-    ],
-	{
-		writeToDisk: true,
-	}),
-  ]
+        new WasmPackPlugin({
+            crateDirectory: path.resolve(__dirname, "crate"),
+            // WasmPackPlugin defaults to compiling in "dev" profile. To change that, use forceMode: 'release':
+            // forceMode: 'release'
+        }),
+        new CopyPlugin([{
+                    from: '../roms',
+                    to: './roms'
+                },
+            ], {
+            writeToDisk: true,
+        }),
+    ]
 };

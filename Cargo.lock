@@ -49,6 +49,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "chip8-wasm"
+version = "0.0.1"
+dependencies = [
+ "chip8 0.0.1",
+ "wasm-bindgen 0.2.65 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
 name = "cmake"
 version = "0.1.44"
 source = "registry+https://github.com/rust-lang/crates.io-index"
