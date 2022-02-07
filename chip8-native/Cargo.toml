@@ -6,4 +6,4 @@ edition = "2018"
 
 [dependencies]
 chip8 = { path = "../chip8" }
-sdl2 = { version = "0.35.1", features = [ "bundled" ] }
+sdl2 = { version = "0.35.2", features = [ "bundled" ] }
